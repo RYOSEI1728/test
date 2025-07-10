@@ -1,78 +1,121 @@
 import streamlit as st
 import numpy as np
-import random
 
 # ゲームの初期設定
-def initialize_game():
-    # カードのペアを用意する（2つずつ同じ数字を持つ）
-    cards = [i for i in range(1, 9)] * 2  # 1~8のペア
-    random.shuffle(cards)  # シャッフルしてランダム化
-    board = np.array(cards).reshape(4, 4)  # 4x4のボードにする
+def initialize_board():
+    board = np.full((8, 8), None)
+    # 初期配置
+    board[3, 3] = '白'
+    board[3, 4] = '黒'
+    board[4, 3] = '黒'
+    board[4, 4] = '白'
     return board
 
-# ゲームの状態をリセット
-def reset_game():
-    st.session_state.board = initialize_game()  # 新しいボードを初期化
-    st.session_state.flipped = np.full((4, 4), False)  # 全てのカードは裏向き
-    st.session_state.matched = []  # 一度ペアになったカードの位置
-    st.session_state.turns = 0  # ターン数
-    st.session_state.first_card = None  # 最初にめくったカード
-    st.session_state.is_game_over = False  # ゲームオーバーかどうか
+# 駒をひっくり返す処理
+def flip_pieces(board, row, col, player):
+    opponent = '黒' if player == '白' else '白'
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-# カードをめくった後の処理
-def flip_card(row, col):
-    # 最初のカードをめくる
-    if st.session_state.first_card is None:
-        st.session_state.first_card = (row, col)
-        st.session_state.flipped[row, col] = True
-        return
-    
-    # 2枚目のカードをめくる
-    first_row, first_col = st.session_state.first_card
-    if st.session_state.board[first_row, first_col] == st.session_state.board[row, col]:
-        st.session_state.matched.append((first_row, first_col, row, col))  # ペアが合ったカード
-        st.session_state.flipped[row, col] = True
-        st.session_state.first_card = None
-    else:
-        st.session_state.flipped[first_row, first_col] = False
-        st.session_state.flipped[row, col] = True
-        st.session_state.first_card = None
+    for dr, dc in directions:
+        r, c = row + dr, col + dc
+        flip_positions = []
 
-    st.session_state.turns += 1
+        while 0 <= r < 8 and 0 <= c < 8 and board[r, c] == opponent:
+            flip_positions.append((r, c))
+            r += dr
+            c += dc
+        
+        if 0 <= r < 8 and 0 <= c < 8 and board[r, c] == player:
+            for fr, fc in flip_positions:
+                board[fr, fc] = player
 
-    # ゲームオーバー条件を確認
-    if len(st.session_state.matched) == 8:
-        st.session_state.is_game_over = True
+# 空きマスに合法的に置けるか確認する処理
+def is_valid_move(board, row, col, player):
+    if board[row, col] is not None:
+        return False
+    opponent = '黒' if player == '白' else '白'
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+    valid = False
 
-# ゲームを再開する処理
-def game_ui():
+    for dr, dc in directions:
+        r, c = row + dr, col + dc
+        flip_positions = []
+
+        while 0 <= r < 8 and 0 <= c < 8 and board[r, c] == opponent:
+            flip_positions.append((r, c))
+            r += dr
+            c += dc
+        
+        if 0 <= r < 8 and 0 <= c < 8 and board[r, c] == player and flip_positions:
+            valid = True
+
+    return valid
+
+# プレイヤーが置ける場所をリストアップ
+def get_valid_moves(board, player):
+    valid_moves = []
+    for row in range(8):
+        for col in range(8):
+            if is_valid_move(board, row, col, player):
+                valid_moves.append((row, col))
+    return valid_moves
+
+# ゲームの進行とUI
+def play_game():
+    # セッション状態の確認・初期化
     if 'board' not in st.session_state:
-        reset_game()
+        st.session_state.board = initialize_board()
+        st.session_state.current_player = '黒'  # 最初のプレイヤー
+        st.session_state.turns = 0  # ターン数
+        st.session_state.is_game_over = False  # ゲームオーバーのフラグ
 
-    board = st.session_state.board
-    flipped = st.session_state.flipped
-
-    st.title("真剣衰弱 (Memory Game)")
-
-    # ゲーム終了時の表示
-    if st.session_state.is_game_over:
-        st.success(f"ゲーム終了！ターン数: {st.session_state.turns}回")
-        if st.button("もう一度遊ぶ"):
-            reset_game()
-        return
-
-    st.write(f"ターン: {st.session_state.turns}回")
+    # ターン表示
+    st.title(f"オセロ: {st.session_state.current_player}の番")
+    st.write(f"ターン数: {st.session_state.turns}")
 
     # ボードの表示
-    for i in range(4):
-        cols = st.columns(4)
-        for j in range(4):
-            if flipped[i, j]:
-                # 裏向きではなく、カードが表になっているとき
-                cols[j].button(f'{board[i, j]}', key=f"{i}_{j}")
+    board_display = np.copy(st.session_state.board)
+    for i in range(8):
+        cols = st.columns(8)
+        for j in range(8):
+            if board_display[i, j] is None:
+                cols[j].button(' ', key=f'{i}_{j}', disabled=True)  # 空白のセル
             else:
-                # 裏向きカード
-                cols[j].button('?', key=f"{i}_{j}_hidden", on_click=flip_card, args=(i, j))
+                cols[j].button(board_display[i, j], key=f'{i}_{j}', on_click=make_move, args=(i, j))
 
-# ゲーム開始
-game_ui()
+    # 勝敗の判定
+    if st.session_state.is_game_over:
+        st.write("ゲーム終了！")
+        black_count = np.sum(st.session_state.board == '黒')
+        white_count = np.sum(st.session_state.board == '白')
+        if black_count > white_count:
+            st.write(f"黒の勝ち！ {black_count} 対 {white_count}")
+        elif black_count < white_count:
+            st.write(f"白の勝ち！ {white_count} 対 {black_count}")
+        else:
+            st.write(f"引き分け！ {black_count} 対 {white_count}")
+        if st.button("もう一度遊ぶ"):
+            st.session_state.board = initialize_board()
+            st.session_state.current_player = '黒'
+            st.session_state.turns = 0
+            st.session_state.is_game_over = False
+
+# プレイヤーの手を処理する関数
+def make_move(row, col):
+    # 現在のプレイヤーの手を置ける場合
+    if is_valid_move(st.session_state.board, row, col, st.session_state.current_player):
+        st.session_state.board[row, col] = st.session_state.current_player
+        flip_pieces(st.session_state.board, row, col, st.session_state.current_player)
+        
+        # 次のプレイヤーに交代
+        st.session_state.current_player = '白' if st.session_state.current_player == '黒' else '黒'
+        st.session_state.turns += 1
+
+        # 勝利条件のチェック
+        valid_moves = get_valid_moves(st.session_state.board, st.session_state.current_player)
+        if not valid_moves:
+            # 次のプレイヤーが置ける場所がなければゲーム終了
+            st.session_state.is_game_over = True
+
+# ゲームの開始
+play_game()
