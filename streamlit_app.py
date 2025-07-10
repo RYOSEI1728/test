@@ -1,32 +1,17 @@
 import streamlit as st
-import random
+import numpy as np
 
-# ジャンケンの手を定義
-hands = ["グー", "チョキ", "パー"]
+# 初期のオセロボード設定
+def initialize_board():
+    board = np.full((8, 8), None)
+    # 初期配置
+    board[3, 3] = '白'
+    board[3, 4] = '黒'
+    board[4, 3] = '黒'
+    board[4, 4] = '白'
+    return board
 
-# ストリームリットアプリのタイトル
-st.title("ジャンケンゲーム")
-
-# ユーザーが選ぶ手を選択するためのボタン
-user_choice = st.radio("あなたの手を選んでください:", hands)
-
-# コンピュータの手をランダムに選ぶ
-computer_choice = random.choice(hands)
-
-# ゲームの進行ボタン
-if st.button("ジャンケン！"):
-    # 結果を表示
-    st.write(f"あなたの手: {user_choice}")
-    st.write(f"コンピュータの手: {computer_choice}")
-    
-    # 勝敗を判定
-    if user_choice == computer_choice:
-        result = "引き分け"
-    elif (user_choice == "グー" and computer_choice == "チョキ") or \
-         (user_choice == "チョキ" and computer_choice == "パー") or \
-         (user_choice == "パー" and computer_choice == "グー"):
-        result = "あなたの勝ち！"
-    else:
-        result = "コンピュータの勝ち！"
-
-    st.write(f"結果: {result}")
+# 駒をひっくり返す関数
+def flip_pieces(board, row, col, player):
+    opponent = '黒' if player == '白' else '白'
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
